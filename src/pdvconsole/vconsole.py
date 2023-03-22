@@ -66,8 +66,8 @@ async def get_incidents(assigned_to: bool = False) -> list[Incident]:
 
     more = True
     incidents: list[Incident] = []
-    while more:
-        async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient() as client:
+        while more:
             resp = await client.get(url, headers=headers, params=params)
             resp.raise_for_status()
             incidents.extend(
