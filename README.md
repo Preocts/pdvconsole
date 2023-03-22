@@ -7,18 +7,9 @@
 
 # pdvconsole
 
-A template I use for most projects and is setup to jive with my environment at the company I work with.
+## In development
 
-This is not the one-shot solution to project structure or packaging. This is
-just what works well for one egg on the Internet. Feel free to use it as you see
-fit.
-
-The primary setup here uses dynamically loaded requirement files from the
-`./requirements` directory in the pyproject.toml file. This is ideal for
-micro-services, applications, or scripts that need all requirements pinned.
-Pinning is handled by `pip-compile`. The files in `./alt_files` offer an
-alternative where all requirements are kept within the pyproject.toml file and
-any pinning is manually managed.
+A side project to create a visibility console for PagerDuty in my terminal.
 
 ---
 
