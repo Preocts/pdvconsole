@@ -161,7 +161,7 @@ def render_incident_panel(pd_details: VConsole, panel_height: int) -> Panel:
                 status=incident.status[:4],
                 urgency=incident.urgency,
                 priority=incident.priority,
-                duration=open_duration.total_seconds() / 60,
+                duration=abs(open_duration.total_seconds() / 60),
                 pdid=incident.pdid,
                 title=incident.title,
             )
