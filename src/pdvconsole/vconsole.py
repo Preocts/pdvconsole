@@ -60,6 +60,15 @@ class Incident:
         return secrets.get("PAGERDUTY_USER_ID") in ids
 
 
+@dataclasses.dataclass(frozen=True)
+class Priority:
+    """Priority class."""
+
+    index: int
+    pdid: str
+    name: str
+
+
 @dataclasses.dataclass
 class VConsole:
     """VConsole class for the pdvconsole package."""
@@ -71,6 +80,7 @@ class VConsole:
     total_acknowledged: int = 0
     total_assigned: int = 0
     incidents: list[Incident] = dataclasses.field(default_factory=list)
+    priorities: list[Priority] = dataclasses.field(default_factory=list)
 
     def update(self, incidents: list[Incident]) -> None:
         """Update the VConsole."""
@@ -86,6 +96,26 @@ class VConsole:
             [incident for incident in incidents if incident.self_assigned]
         )
         self.incidents = incidents
+
+
+async def get_priorities() -> list[Priority]:
+    """Get priorities."""
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/vnd.pagerduty+json;version=2",
+        "Authorization": f"Token token={secrets.get('PAGERDUTY_TOKEN')}",
+    }
+
+    url = "https://api.pagerduty.com/priorities"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=headers)
+        resp.raise_for_status()
+
+    priorities = []
+    for idx, pri in enumerate(resp.json()["priorities"]):
+        priorities.append(Priority(index=idx, pdid=pri["id"], name=pri["name"]))
+
+    return priorities
 
 
 async def get_incidents(assigned_to: bool = False) -> list[Incident]:
@@ -184,7 +214,7 @@ def render_details_panel(pd_details: VConsole) -> Panel:
         f"Total incidents:\n\t{pd_details.total_incidents}\n",
         f"Triggered:\n\t{pd_details.total_triggered}\n",
         f"Acknowledged:\n\t{pd_details.total_acknowledged}\n",
-        f"Assigned:\n\t{pd_details.total_assigned}",
+        f"Assigned:\n\t{pd_details.total_assigned}\n",
     )
 
     return Panel(text, title="Details", expand=True)
@@ -198,6 +228,12 @@ def calc_max_height(console: Console) -> int:
         else MIN_DISPLAY_ROWS
     )
     return max_height
+
+
+async def fetch_priorities(pd_details: VConsole) -> None:
+    """Fetch the priorities."""
+    pd_details.last_updated = "Fetching priorities..."
+    pd_details.priorities = await get_priorities()
 
 
 async def update_pd_details(pd_details: VConsole) -> None:
@@ -236,6 +272,7 @@ def main() -> int:
     pd_details = VConsole()
 
     event_loop = asyncio.get_event_loop()
+    event_loop.create_task(fetch_priorities(pd_details)),
     event_loop.create_task(update_pd_details(pd_details)),
     event_loop.create_task(render_vconsole(console, pd_details)),
     event_loop.run_forever()
