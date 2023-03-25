@@ -21,27 +21,14 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython"
 ]
 
-dependencies = [
-    "rich",
-    "httpx",
-    "secretbox",
-]
+dynamic = ["dependencies", "optional-dependencies"]
 
-[project.optional-dependencies]
-dev = [
-    "pre-commit",
-    "black",
-    "mypy",
-    "flake8",
-    "flake8-builtins",
-    "flake8-pep585",
-]
-test = [
-    "pytest",
-    "pytest-randomly",
-    "coverage",
-    "tox"
-]
+[tool.setuptools.dynamic.dependencies]
+file = ["requirements/requirements.txt"]
+
+[tool.setuptools.dynamic.optional-dependencies]
+dev = {file = ["requirements/requirements-dev.txt"]}
+test = {file = ["requirements/requirements-test.txt"]}
 
 [project.urls]
 homepage = "https://github.com/Preocts/pdvconsole"
