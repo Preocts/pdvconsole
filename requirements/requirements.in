@@ -1,0 +1,7 @@
+# Requirements
+# --index-url=http://pypi.example.com/simple
+# --no-cache-dir
+
+rich
+httpx
+secretbox
