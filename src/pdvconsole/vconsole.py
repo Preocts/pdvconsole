@@ -25,6 +25,7 @@ POLL_LIMIT = 100  # Number of incidents to return per API call
 INCIDENT_ROW = (
     "{assigned:^3}|{status:^6}|{urgency:^6}|{priority:^4}|{duration:>4.0f}m | {title}"
 )
+SORT_BY_LABELS = ["Created At", "Priority", "Urgency"]
 secrets = SecretBox(auto_load=True)
 
 
@@ -86,6 +87,7 @@ class VConsole:
         self.priorities: list[Priority] = []
         self.priority_filter: str | None = None
         self.urgency_filter: str | None = None
+        self.sort_by: int = 0
         self.reverse: bool = False
 
     @property
@@ -107,7 +109,17 @@ class VConsole:
                 if incident.urgency == self.urgency_filter
             ]
 
-        return incidents_
+        # Sort by created_at
+        if self.sort_by == 0:
+            incidents_.sort(key=lambda x: x.created_at)
+        # Sort by priority and created_at
+        elif self.sort_by == 1:
+            incidents_.sort(key=lambda x: (x.priority, x.created_at))
+        # Sort by urgency and created_at
+        elif self.sort_by == 2:
+            incidents_.sort(key=lambda x: (x.urgency, x.created_at))
+
+        return incidents_ if not self.reverse else incidents_[::-1]
 
     def update(self, incidents: list[Incident]) -> None:
         """Update the VConsole."""
@@ -126,12 +138,22 @@ class VConsole:
 
     def on_press(self, key: str) -> bool:
         """Handle key presses."""
+        # Filter by priority
         if key in list("1234567890"):
             pri_map = {p.index: p.name for p in self.priorities}
             self.priority_filter = pri_map.get(int(key))
 
+        # Filter by urgency
         if key in "hla":
             self.urgency_filter = {"h": "high", "l": "low", "a": None}.get(key)
+
+        # Rotate sort filter
+        if key == "s":
+            self.sort_by = (self.sort_by + 1) % len(SORT_BY_LABELS)
+
+        # Reverse sort order
+        if key == "r":
+            self.reverse = not self.reverse
 
         if key == "q":
             return False
@@ -256,6 +278,7 @@ def render_details_panel(pd_details: VConsole) -> Panel:
         f"Triggered:\n\t{pd_details.total_triggered}\n",
         f"Acknowledged:\n\t{pd_details.total_acknowledged}\n",
         f"Assigned:\n\t{pd_details.total_assigned}\n",
+        f"Sorted by:\n\t{SORT_BY_LABELS[pd_details.sort_by]}\n",
         f"Priority filter:\n\t{pd_details.priority_filter}\n",
         f"Urgency filter:\n\t{pd_details.urgency_filter}\n",
     )
