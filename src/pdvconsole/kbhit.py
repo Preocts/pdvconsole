@@ -156,24 +156,3 @@ class KeyboardListener:
             self._keyboard.set_normal_term()
 
         return threading.Thread(target=listen)
-
-
-if __name__ == "__main__":
-
-    def on_press(c: str) -> bool:
-        print(c)
-        if c == "q":
-            return False
-        return True
-
-    keyboard_listener = KeyboardListener(on_press)
-
-    keyboard_listener.start()
-    print("Listening...")
-    print("Press q to quit")
-
-    while keyboard_listener.is_listening:
-        pass
-
-    keyboard_listener.stop()
-    print("Done")

@@ -71,18 +71,43 @@ class Priority:
     name: str
 
 
-@dataclasses.dataclass
 class VConsole:
     """VConsole class for the pdvconsole package."""
 
-    last_updated: str = datetime.now().strftime("%H:%M:%S")
-    update_interval: int = POLL_TIME_SECONDS
-    total_incidents: int = 0
-    total_triggered: int = 0
-    total_acknowledged: int = 0
-    total_assigned: int = 0
-    incidents: list[Incident] = dataclasses.field(default_factory=list)
-    priorities: list[Priority] = dataclasses.field(default_factory=list)
+    def __init__(self) -> None:
+        """Initialize the VConsole."""
+        self.last_updated: str = datetime.now().strftime("%H:%M:%S")
+        self.update_interval: int = POLL_TIME_SECONDS
+        self.total_incidents: int = 0
+        self.total_triggered: int = 0
+        self.total_acknowledged: int = 0
+        self.total_assigned: int = 0
+        self._incidents: list[Incident] = []
+        self.priorities: list[Priority] = []
+        self.priority_filter: str | None = None
+        self.urgency_filter: str | None = None
+        self.reverse: bool = False
+
+    @property
+    def incidents(self) -> list[Incident]:
+        """Return a list of incidents."""
+        incidents_ = self._incidents.copy()
+
+        if self.priority_filter:
+            incidents_ = [
+                incident
+                for incident in self._incidents
+                if incident.priority == self.priority_filter
+            ]
+
+        if self.urgency_filter:
+            incidents_ = [
+                incident
+                for incident in incidents_
+                if incident.urgency == self.urgency_filter
+            ]
+
+        return incidents_
 
     def update(self, incidents: list[Incident]) -> None:
         """Update the VConsole."""
@@ -97,7 +122,21 @@ class VConsole:
         self.total_assigned = len(
             [incident for incident in incidents if incident.self_assigned]
         )
-        self.incidents = incidents
+        self._incidents = incidents
+
+    def on_press(self, key: str) -> bool:
+        """Handle key presses."""
+        if key in list("1234567890"):
+            pri_map = {p.index: p.name for p in self.priorities}
+            self.priority_filter = pri_map.get(int(key))
+
+        if key in "hla":
+            self.urgency_filter = {"h": "high", "l": "low", "a": None}.get(key)
+
+        if key == "q":
+            return False
+
+        return True
 
 
 async def get_priorities() -> list[Priority]:
@@ -114,7 +153,7 @@ async def get_priorities() -> list[Priority]:
         resp.raise_for_status()
 
     priorities = []
-    for idx, pri in enumerate(resp.json()["priorities"]):
+    for idx, pri in enumerate(resp.json()["priorities"], start=1):
         priorities.append(Priority(index=idx, pdid=pri["id"], name=pri["name"]))
 
     return priorities
@@ -217,6 +256,8 @@ def render_details_panel(pd_details: VConsole) -> Panel:
         f"Triggered:\n\t{pd_details.total_triggered}\n",
         f"Acknowledged:\n\t{pd_details.total_acknowledged}\n",
         f"Assigned:\n\t{pd_details.total_assigned}\n",
+        f"Priority filter:\n\t{pd_details.priority_filter}\n",
+        f"Urgency filter:\n\t{pd_details.urgency_filter}\n",
     )
 
     return Panel(text, title="Details", expand=True)
@@ -279,19 +320,11 @@ async def catch_stop(
     event_loop.stop()
 
 
-def on_press(key: str) -> bool:
-    """On key press."""
-    if key.lower() == "q":
-        return False
-
-    return True
-
-
 def main() -> int:
     """Main entry point for the pdvconsole package."""
     console = Console(tab_size=2)
     pd_details = VConsole()
-    keyboard_listener = KeyboardListener(on_press=on_press)
+    keyboard_listener = KeyboardListener(on_press=pd_details.on_press)
     keyboard_listener.start()
 
     event_loop = asyncio.get_event_loop()
