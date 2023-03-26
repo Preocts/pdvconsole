@@ -19,7 +19,7 @@ from .kbhit import KeyboardListener
 
 MIN_DISPLAY_ROWS = 5
 PANEL_OFFSET = 6  # Number of rows used by the header and footer
-POLL_TIME_SECONDS = 10  # Time between PagerDuty API calls
+POLL_TIME_SECONDS = 30  # Time between PagerDuty API calls
 POLL_LIMIT = 100  # Number of incidents to return per API call
 
 INCIDENT_ROW = (
@@ -141,21 +141,26 @@ class VConsole:
         # Filter by priority
         if key in list("1234567890"):
             pri_map = {p.index: p.name for p in self.priorities}
-            self.priority_filter = pri_map.get(int(key))
+            # toggle filter if already selected
+            if pri_map.get(int(key)) == self.priority_filter:
+                self.priority_filter = None
+            else:
+                self.priority_filter = pri_map.get(int(key))
 
         # Filter by urgency
-        if key in "hla":
+        if key.lower() in "hla":
             self.urgency_filter = {"h": "high", "l": "low", "a": None}.get(key)
 
         # Rotate sort filter
-        if key == "s":
+        if key.lower() == "s":
             self.sort_by = (self.sort_by + 1) % len(SORT_BY_LABELS)
 
         # Reverse sort order
-        if key == "r":
+        if key.lower() == "r":
             self.reverse = not self.reverse
 
-        if key == "q":
+        # Quit
+        if key.lower() == "q":
             return False
 
         return True
