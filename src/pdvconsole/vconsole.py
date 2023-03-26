@@ -14,6 +14,8 @@ from rich.panel import Panel
 from rich.text import Text
 from secretbox import SecretBox
 
+from .kbhit import KeyboardListener
+
 
 MIN_DISPLAY_ROWS = 5
 PANEL_OFFSET = 6  # Number of rows used by the header and footer
@@ -266,15 +268,37 @@ async def render_vconsole(console: Console, pd_details: VConsole) -> None:
             await asyncio.sleep(0.2)
 
 
+async def catch_stop(
+    event_loop: asyncio.AbstractEventLoop,
+    keyboard_listener: KeyboardListener,
+) -> None:
+    """Catch the stop event."""
+    while keyboard_listener.is_listening:
+        await asyncio.sleep(0.5)
+
+    event_loop.stop()
+
+
+def on_press(key: str) -> bool:
+    """On key press."""
+    if key.lower() == "q":
+        return False
+
+    return True
+
+
 def main() -> int:
     """Main entry point for the pdvconsole package."""
     console = Console(tab_size=2)
     pd_details = VConsole()
+    keyboard_listener = KeyboardListener(on_press=on_press)
+    keyboard_listener.start()
 
     event_loop = asyncio.get_event_loop()
-    event_loop.create_task(fetch_priorities(pd_details)),
-    event_loop.create_task(update_pd_details(pd_details)),
-    event_loop.create_task(render_vconsole(console, pd_details)),
+    event_loop.create_task(fetch_priorities(pd_details))
+    event_loop.create_task(update_pd_details(pd_details))
+    event_loop.create_task(render_vconsole(console, pd_details))
+    event_loop.create_task(catch_stop(event_loop, keyboard_listener))
     event_loop.run_forever()
 
     return 0

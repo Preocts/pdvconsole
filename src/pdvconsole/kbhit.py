@@ -113,7 +113,7 @@ class _KBHit:
             return dr != []
 
 
-class Listener:
+class KeyboardListener:
     """A class that listens for keyboard input and calls a given function."""
 
     def __init__(self, on_press: Callable[[str], bool]) -> None:
@@ -166,7 +166,7 @@ if __name__ == "__main__":
             return False
         return True
 
-    keyboard_listener = Listener(on_press)
+    keyboard_listener = KeyboardListener(on_press)
 
     keyboard_listener.start()
     print("Listening...")
