@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from collections.abc import AsyncGenerator
 from datetime import datetime
 from typing import Any
 
@@ -16,17 +17,18 @@ from secretbox import SecretBox
 
 from .kbhit import KeyboardListener
 
+secrets = SecretBox(auto_load=True)
 
 MIN_DISPLAY_ROWS = 5
 PANEL_OFFSET = 6  # Number of rows used by the header and footer
-POLL_TIME_SECONDS = 30  # Time between PagerDuty API calls
-POLL_LIMIT = 100  # Number of incidents to return per API call
+# Time between PagerDuty API calls in seconds
+POLL_TIME_SECONDS = int(secrets.get("POLL_TIME_SECONDS", "60"))
+POLL_LIMIT = 25  # Number of incidents to return per API call
 
 INCIDENT_ROW = (
     "{assigned:^3}|{status:^6}|{urgency:^6}|{priority:^4}|{duration:>4.0f}m | {title}"
 )
 SORT_BY_LABELS = ["Created At", "Priority", "Urgency"]
-secrets = SecretBox(auto_load=True)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -40,6 +42,7 @@ class Incident:
     priority: str
     created_at: str
     self_assigned: bool
+    last_seen: datetime = dataclasses.field(default_factory=datetime.now)
 
     @classmethod
     def from_dict(cls, incident: dict[str, Any]) -> Incident:
@@ -83,7 +86,7 @@ class VConsole:
         self.total_triggered: int = 0
         self.total_acknowledged: int = 0
         self.total_assigned: int = 0
-        self._incidents: list[Incident] = []
+        self._incidents: dict[str, Incident] = {}
         self.priorities: list[Priority] = []
         self.priority_filter: str | None = None
         self.urgency_filter: str | None = None
@@ -93,12 +96,12 @@ class VConsole:
     @property
     def incidents(self) -> list[Incident]:
         """Return a list of incidents."""
-        incidents_ = self._incidents.copy()
+        incidents_ = list(self._incidents.values())
 
         if self.priority_filter:
             incidents_ = [
                 incident
-                for incident in self._incidents
+                for incident in incidents_
                 if incident.priority == self.priority_filter
             ]
 
@@ -121,20 +124,29 @@ class VConsole:
 
         return incidents_ if not self.reverse else incidents_[::-1]
 
-    def update(self, incidents: list[Incident]) -> None:
+    def update(self, incident: Incident) -> None:
         """Update the VConsole."""
-        self.last_updated = datetime.now().strftime("%H:%M:%S")
-        self.total_incidents = len(incidents)
+        self._incidents[incident.pdid] = incident
+        self._update_counts()
+
+    def clean(self) -> None:
+        """Remove incidents not updated after the POLL_TIME_SECONDS parameter."""
+        now = datetime.now()
+        for incident in list(self._incidents.values()):
+            if (now - incident.last_seen).seconds > self.update_interval:
+                del self._incidents[incident.pdid]
+        self._update_counts()
+
+    def _update_counts(self) -> None:
+        """Update the incident counts."""
+        self.total_incidents = len(self.incidents)
         self.total_triggered = len(
-            [incident for incident in incidents if incident.status == "triggered"]
+            [inc for inc in self.incidents if inc.status == "triggered"]
         )
         self.total_acknowledged = len(
-            [incident for incident in incidents if incident.status == "acknowledged"]
+            [inc for inc in self.incidents if inc.status == "acknowledged"]
         )
-        self.total_assigned = len(
-            [incident for incident in incidents if incident.self_assigned]
-        )
-        self._incidents = incidents
+        self.total_assigned = len([inc for inc in self.incidents if inc.self_assigned])
 
     def on_press(self, key: str) -> bool:
         """Handle key presses."""
@@ -186,12 +198,8 @@ async def get_priorities() -> list[Priority]:
     return priorities
 
 
-async def get_incidents(assigned_to: bool = False) -> list[Incident]:
-    """
-    Get incidents, sorted by created_at.
-
-    If assigned_to is True, only incidents assigned to the user will be returned.
-    """
+async def fetch_incidents() -> AsyncGenerator[Incident, None]:
+    """Iterate through incidents."""
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/vnd.pagerduty+json;version=2",
@@ -205,22 +213,17 @@ async def get_incidents(assigned_to: bool = False) -> list[Incident]:
         "offset": "0",
     }
     url = "https://api.pagerduty.com/incidents"
-    if assigned_to:
-        params["user_ids[]"] = [secrets.get("PAGERDUTY_USER_ID")]
 
     more = True
-    incidents: list[Incident] = []
     async with httpx.AsyncClient() as client:
         while more:
             resp = await client.get(url, headers=headers, params=params)
             resp.raise_for_status()
-            incidents.extend(
-                [Incident.from_dict(incident) for incident in resp.json()["incidents"]]
-            )
+            for inc in resp.json()["incidents"]:
+                yield Incident.from_dict(inc)
+
             more = resp.json().get("more", False)
             params["offset"] = str(int(resp.json().get("offset", "0")) + POLL_LIMIT)
-
-    return incidents
 
 
 def vlayout() -> Layout:
@@ -313,12 +316,18 @@ async def update_pd_details(pd_details: VConsole) -> None:
 
     while True:
         if not first_run:
+            pd_details.clean()
+            pd_details.last_updated = datetime.now().strftime("%H:%M:%S")
             await asyncio.sleep(POLL_TIME_SECONDS)
 
         first_run = False
         pd_details.last_updated = "Updating..."
-        incidents = await get_incidents()
-        pd_details.update(incidents)
+
+        # Fetch the incidents using a generator and update the pd_details object
+        print("entering fetch_incidents loop")
+        async for incident in fetch_incidents():
+            print("got incident")
+            pd_details.update(incident)
 
 
 async def render_vconsole(console: Console, pd_details: VConsole) -> None:
@@ -362,6 +371,14 @@ def main() -> int:
     event_loop.create_task(catch_stop(event_loop, keyboard_listener))
     event_loop.run_forever()
 
+    return 0
+
+
+def main2() -> int:
+    pd_details = VConsole()
+    event_loop = asyncio.get_event_loop()
+    event_loop.create_task(update_pd_details(pd_details))
+    event_loop.run_forever()
     return 0
 
 
