@@ -127,7 +127,6 @@ class VConsole:
     def update(self, incident: Incident) -> None:
         """Update the VConsole."""
         self._incidents[incident.pdid] = incident
-        self._update_counts()
 
     def clean(self) -> None:
         """Remove incidents not updated after the POLL_TIME_SECONDS parameter."""
@@ -135,9 +134,8 @@ class VConsole:
         for incident in list(self._incidents.values()):
             if (now - incident.last_seen).seconds > self.update_interval:
                 del self._incidents[incident.pdid]
-        self._update_counts()
 
-    def _update_counts(self) -> None:
+    def update_counts(self) -> None:
         """Update the incident counts."""
         self.total_incidents = len(self.incidents)
         self.total_triggered = len(
@@ -252,6 +250,7 @@ def render_incident_panel(pd_details: VConsole, panel_height: int) -> Panel:
         hidden_count = 0
         incidents_ = pd_details.incidents
 
+    pd_details.update_counts()
     string_version = []
     for incident in incidents_:
         created_at = datetime.strptime(incident.created_at, "%Y-%m-%dT%H:%M:%SZ")
@@ -324,9 +323,7 @@ async def update_pd_details(pd_details: VConsole) -> None:
         pd_details.last_updated = "Updating..."
 
         # Fetch the incidents using a generator and update the pd_details object
-        print("entering fetch_incidents loop")
         async for incident in fetch_incidents():
-            print("got incident")
             pd_details.update(incident)
 
 
@@ -371,14 +368,6 @@ def main() -> int:
     event_loop.create_task(catch_stop(event_loop, keyboard_listener))
     event_loop.run_forever()
 
-    return 0
-
-
-def main2() -> int:
-    pd_details = VConsole()
-    event_loop = asyncio.get_event_loop()
-    event_loop.create_task(update_pd_details(pd_details))
-    event_loop.run_forever()
     return 0
 
 
