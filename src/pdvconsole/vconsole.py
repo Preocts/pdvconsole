@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from collections.abc import AsyncGenerator
 from datetime import datetime
 from typing import Any
 
@@ -122,11 +123,9 @@ class VConsole:
 
         return incidents_ if not self.reverse else incidents_[::-1]
 
-    def update(self, incidents: list[Incident]) -> None:
+    def update(self, incident: Incident) -> None:
         """Update the VConsole."""
-        # self.last_updated = datetime.now().strftime("%H:%M:%S")
-        for incident in incidents:
-            self._incidents[incident.pdid] = incident
+        self._incidents[incident.pdid] = incident
 
         self._update_counts()
 
@@ -191,12 +190,8 @@ async def get_priorities() -> list[Priority]:
     return priorities
 
 
-async def get_incidents(assigned_to: bool = False) -> list[Incident]:
-    """
-    Get incidents, sorted by created_at.
-
-    If assigned_to is True, only incidents assigned to the user will be returned.
-    """
+async def fetch_incidents() -> AsyncGenerator[Incident, None]:
+    """Iterate through incidents."""
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/vnd.pagerduty+json;version=2",
@@ -210,22 +205,18 @@ async def get_incidents(assigned_to: bool = False) -> list[Incident]:
         "offset": "0",
     }
     url = "https://api.pagerduty.com/incidents"
-    if assigned_to:
-        params["user_ids[]"] = [secrets.get("PAGERDUTY_USER_ID")]
 
     more = True
-    incidents: list[Incident] = []
     async with httpx.AsyncClient() as client:
         while more:
             resp = await client.get(url, headers=headers, params=params)
             resp.raise_for_status()
-            incidents.extend(
-                [Incident.from_dict(incident) for incident in resp.json()["incidents"]]
-            )
+
+            async for inc in resp.json()["incidents"]:
+                yield Incident.from_dict(inc)
+
             more = resp.json().get("more", False)
             params["offset"] = str(int(resp.json().get("offset", "0")) + POLL_LIMIT)
-
-    return incidents
 
 
 def vlayout() -> Layout:
@@ -318,12 +309,15 @@ async def update_pd_details(pd_details: VConsole) -> None:
 
     while True:
         if not first_run:
+            pd_details.last_updated = datetime.now().strftime("%H:%M:%S")
             await asyncio.sleep(POLL_TIME_SECONDS)
 
         first_run = False
         pd_details.last_updated = "Updating..."
-        incidents = await get_incidents()
-        pd_details.update(incidents)
+
+        # Fetch the incidents using a generator and update the pd_details object
+        async for incident in fetch_incidents():
+            pd_details.update(incident)
 
 
 async def render_vconsole(console: Console, pd_details: VConsole) -> None:
