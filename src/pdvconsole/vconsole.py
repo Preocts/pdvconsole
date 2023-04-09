@@ -323,9 +323,7 @@ async def update_pd_details(pd_details: VConsole) -> None:
         pd_details.last_updated = "Updating..."
 
         # Fetch the incidents using a generator and update the pd_details object
-        print("entering fetch_incidents loop")
         async for incident in fetch_incidents():
-            print("got incident")
             pd_details.update(incident)
 
 
@@ -370,14 +368,6 @@ def main() -> int:
     event_loop.create_task(catch_stop(event_loop, keyboard_listener))
     event_loop.run_forever()
 
-    return 0
-
-
-def main2() -> int:
-    pd_details = VConsole()
-    event_loop = asyncio.get_event_loop()
-    event_loop.create_task(update_pd_details(pd_details))
-    event_loop.run_forever()
     return 0
 
 
