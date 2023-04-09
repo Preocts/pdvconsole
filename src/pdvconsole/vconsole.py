@@ -127,7 +127,14 @@ class VConsole:
     def update(self, incident: Incident) -> None:
         """Update the VConsole."""
         self._incidents[incident.pdid] = incident
+        self._update_counts()
 
+    def clean(self) -> None:
+        """Remove incidents not updated after the POLL_TIME_SECONDS parameter."""
+        now = datetime.now()
+        for incident in list(self._incidents.values()):
+            if (now - incident.last_seen).seconds > self.update_interval:
+                del self._incidents[incident.pdid]
         self._update_counts()
 
     def _update_counts(self) -> None:
@@ -309,6 +316,7 @@ async def update_pd_details(pd_details: VConsole) -> None:
 
     while True:
         if not first_run:
+            pd_details.clean()
             pd_details.last_updated = datetime.now().strftime("%H:%M:%S")
             await asyncio.sleep(POLL_TIME_SECONDS)
 
