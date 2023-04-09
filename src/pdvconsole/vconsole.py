@@ -17,17 +17,18 @@ from secretbox import SecretBox
 
 from .kbhit import KeyboardListener
 
+secrets = SecretBox(auto_load=True)
 
 MIN_DISPLAY_ROWS = 5
 PANEL_OFFSET = 6  # Number of rows used by the header and footer
-POLL_TIME_SECONDS = 60  # Time between PagerDuty API calls
+# Time between PagerDuty API calls in seconds
+POLL_TIME_SECONDS = int(secrets.get("POLL_TIME_SECONDS", "60"))
 POLL_LIMIT = 25  # Number of incidents to return per API call
 
 INCIDENT_ROW = (
     "{assigned:^3}|{status:^6}|{urgency:^6}|{priority:^4}|{duration:>4.0f}m | {title}"
 )
 SORT_BY_LABELS = ["Created At", "Priority", "Urgency"]
-secrets = SecretBox(auto_load=True)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -211,8 +212,7 @@ async def fetch_incidents() -> AsyncGenerator[Incident, None]:
         while more:
             resp = await client.get(url, headers=headers, params=params)
             resp.raise_for_status()
-
-            async for inc in resp.json()["incidents"]:
+            for inc in resp.json()["incidents"]:
                 yield Incident.from_dict(inc)
 
             more = resp.json().get("more", False)
@@ -316,7 +316,9 @@ async def update_pd_details(pd_details: VConsole) -> None:
         pd_details.last_updated = "Updating..."
 
         # Fetch the incidents using a generator and update the pd_details object
+        print("entering fetch_incidents loop")
         async for incident in fetch_incidents():
+            print("got incident")
             pd_details.update(incident)
 
 
@@ -361,6 +363,14 @@ def main() -> int:
     event_loop.create_task(catch_stop(event_loop, keyboard_listener))
     event_loop.run_forever()
 
+    return 0
+
+
+def main2() -> int:
+    pd_details = VConsole()
+    event_loop = asyncio.get_event_loop()
+    event_loop.create_task(update_pd_details(pd_details))
+    event_loop.run_forever()
     return 0
 
 
