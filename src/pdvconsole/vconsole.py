@@ -19,8 +19,8 @@ from .kbhit import KeyboardListener
 
 MIN_DISPLAY_ROWS = 5
 PANEL_OFFSET = 6  # Number of rows used by the header and footer
-POLL_TIME_SECONDS = 30  # Time between PagerDuty API calls
-POLL_LIMIT = 100  # Number of incidents to return per API call
+POLL_TIME_SECONDS = 60  # Time between PagerDuty API calls
+POLL_LIMIT = 25  # Number of incidents to return per API call
 
 INCIDENT_ROW = (
     "{assigned:^3}|{status:^6}|{urgency:^6}|{priority:^4}|{duration:>4.0f}m | {title}"
@@ -40,6 +40,7 @@ class Incident:
     priority: str
     created_at: str
     self_assigned: bool
+    last_seen: datetime = dataclasses.field(default_factory=datetime.now)
 
     @classmethod
     def from_dict(cls, incident: dict[str, Any]) -> Incident:
@@ -83,7 +84,7 @@ class VConsole:
         self.total_triggered: int = 0
         self.total_acknowledged: int = 0
         self.total_assigned: int = 0
-        self._incidents: list[Incident] = []
+        self._incidents: dict[str, Incident] = {}
         self.priorities: list[Priority] = []
         self.priority_filter: str | None = None
         self.urgency_filter: str | None = None
@@ -93,12 +94,12 @@ class VConsole:
     @property
     def incidents(self) -> list[Incident]:
         """Return a list of incidents."""
-        incidents_ = self._incidents.copy()
+        incidents_ = list(self._incidents.values())
 
         if self.priority_filter:
             incidents_ = [
                 incident
-                for incident in self._incidents
+                for incident in incidents_
                 if incident.priority == self.priority_filter
             ]
 
@@ -123,18 +124,22 @@ class VConsole:
 
     def update(self, incidents: list[Incident]) -> None:
         """Update the VConsole."""
-        self.last_updated = datetime.now().strftime("%H:%M:%S")
-        self.total_incidents = len(incidents)
+        # self.last_updated = datetime.now().strftime("%H:%M:%S")
+        for incident in incidents:
+            self._incidents[incident.pdid] = incident
+
+        self._update_counts()
+
+    def _update_counts(self) -> None:
+        """Update the incident counts."""
+        self.total_incidents = len(self.incidents)
         self.total_triggered = len(
-            [incident for incident in incidents if incident.status == "triggered"]
+            [inc for inc in self.incidents if inc.status == "triggered"]
         )
         self.total_acknowledged = len(
-            [incident for incident in incidents if incident.status == "acknowledged"]
+            [inc for inc in self.incidents if inc.status == "acknowledged"]
         )
-        self.total_assigned = len(
-            [incident for incident in incidents if incident.self_assigned]
-        )
-        self._incidents = incidents
+        self.total_assigned = len([inc for inc in self.incidents if inc.self_assigned])
 
     def on_press(self, key: str) -> bool:
         """Handle key presses."""
