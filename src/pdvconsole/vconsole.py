@@ -5,6 +5,7 @@ import asyncio
 import dataclasses
 from collections.abc import AsyncGenerator
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
 import httpx
@@ -28,7 +29,14 @@ POLL_LIMIT = 25  # Number of incidents to return per API call
 INCIDENT_ROW = (
     "{assigned:^3}|{status:^6}|{urgency:^6}|{priority:^4}|{duration:>4.0f}m | {title}"
 )
-SORT_BY_LABELS = ["Created At", "Priority", "Urgency"]
+
+
+class SortBy(Enum):
+    """Enum for sorting incidents."""
+
+    CREATED_AT = 0
+    PRIORITY = 1
+    URGENCY = 2
 
 
 @dataclasses.dataclass(frozen=True)
@@ -90,7 +98,7 @@ class VConsole:
         self.priorities: list[Priority] = []
         self.priority_filter: str | None = None
         self.urgency_filter: str | None = None
-        self.sort_by: int = 0
+        self.sort_by: SortBy = SortBy.CREATED_AT
         self.reverse: bool = False
 
     @property
@@ -112,17 +120,23 @@ class VConsole:
                 if incident.urgency == self.urgency_filter
             ]
 
-        # Sort by created_at
-        if self.sort_by == 0:
-            incidents_.sort(key=lambda x: x.created_at)
-        # Sort by priority and created_at
-        elif self.sort_by == 1:
-            incidents_.sort(key=lambda x: (x.priority, x.created_at))
-        # Sort by urgency and created_at
-        elif self.sort_by == 2:
-            incidents_.sort(key=lambda x: (x.urgency, x.created_at))
+        incidents_ = sorted(incidents_, key=self._sort_key)
 
         return incidents_ if not self.reverse else incidents_[::-1]
+
+    def _sort_key(self, incident: Incident) -> tuple[Any, ...]:
+        """Return a tuple of sort keys."""
+        # Sort by priority and created_at
+        if self.sort_by == SortBy.PRIORITY:
+            return (incident.priority, incident.created_at)
+
+        # Sort by urgency and created_at
+        elif self.sort_by == SortBy.URGENCY:
+            return (incident.urgency, incident.created_at)
+
+        # Sort by created_at by default
+        else:
+            return (incident.created_at,)
 
     def update(self, incident: Incident) -> None:
         """Update the VConsole."""
@@ -161,9 +175,9 @@ class VConsole:
         if key.lower() in "hla":
             self.urgency_filter = {"h": "high", "l": "low", "a": None}.get(key)
 
-        # Rotate sort filter
+        # Rotate SortBy enum selected
         if key.lower() == "s":
-            self.sort_by = (self.sort_by + 1) % len(SORT_BY_LABELS)
+            self.sort_by = SortBy((self.sort_by.value + 1) % len(SortBy))
 
         # Reverse sort order
         if key.lower() == "r":
@@ -285,7 +299,7 @@ def render_details_panel(pd_details: VConsole) -> Panel:
         f"Triggered:\n\t{pd_details.total_triggered}\n",
         f"Acknowledged:\n\t{pd_details.total_acknowledged}\n",
         f"Assigned:\n\t{pd_details.total_assigned}\n",
-        f"Sorted by:\n\t{SORT_BY_LABELS[pd_details.sort_by]}\n",
+        f"Sorted by:\n\t{pd_details.sort_by.name}\n",
         f"Priority filter:\n\t{pd_details.priority_filter}\n",
         f"Urgency filter:\n\t{pd_details.urgency_filter}\n",
     )
