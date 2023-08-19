@@ -31,7 +31,7 @@ clean:
 	find . -name '*.pyo' -exec rm -f {} +
 	find . -name '__pycache__' -exec rm -rf {} +
 	find . -name '.mypy_cache' -exec rm -rf {} +
-	rm -rf .tox
+	rm -rf .nox
 	rm -f coverage.xml
 	rm -f coverage.json
 	rm -rf htmlcov

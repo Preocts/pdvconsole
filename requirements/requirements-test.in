@@ -1,8 +1,8 @@
-# Testing Requirements - pytest, tox, etc.
+# Testing Requirements
 # --index-url=http://pypi.example.com/simple
 # --no-cache-dir
 
 pytest
 pytest-randomly
 coverage
-tox
+nox
